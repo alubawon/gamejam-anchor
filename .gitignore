@@ -32,3 +32,6 @@ crash-*/
 
 # Logs
 Logs/
+
+# Claude Code local settings (contains permissions)
+.claude/settings.local.json
