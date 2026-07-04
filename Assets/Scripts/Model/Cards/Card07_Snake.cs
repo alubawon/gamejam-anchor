@@ -16,7 +16,11 @@ namespace CardGame.Cards
             var targetPlayer = context.GetPlayer(targetId);
 
             // 免疫检查
-            if (targetPlayer != null && targetPlayer.IsImmune) return;
+            if (targetPlayer != null && targetPlayer.IsImmune)
+            {
+                RaiseEffectBlocked(targetId, playerId);
+                return;
+            }
 
             context.SwapHands(playerId, targetId);
         }

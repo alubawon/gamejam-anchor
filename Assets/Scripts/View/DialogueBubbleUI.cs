@@ -56,6 +56,17 @@ namespace CardGame.UI
             if (_bubblePanel != null) _bubblePanel.SetActive(false);
         }
 
+        /// <summary>设置气泡水平位置（跟随发言人：瘦子右、胖子左、系统居中）。</summary>
+        public void SetBubblePosition(float x)
+        {
+            if (_bubblePanel != null)
+            {
+                var rt = _bubblePanel.GetComponent<RectTransform>();
+                if (rt != null)
+                    rt.anchoredPosition = new Vector2(x, rt.anchoredPosition.y);
+            }
+        }
+
         // ── 上方提示 ──────────────────────────────────────────
 
         public void ShowTopPrompt(string text)

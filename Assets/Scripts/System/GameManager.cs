@@ -14,7 +14,7 @@ namespace CardGame
     {
         [Header("对局配置")]
         [Tooltip("每种卡牌的份数（×7 = 总牌数）")]
-        [SerializeField] private int _copiesPerCard = 5;
+        [SerializeField] private int _copiesPerCard = 3;
 
         [Tooltip("CPU 思考延迟（秒）")]
         [SerializeField] private float _cpuThinkDelay = 1.5f;

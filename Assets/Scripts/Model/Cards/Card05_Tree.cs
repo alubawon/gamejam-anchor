@@ -2,7 +2,7 @@ namespace CardGame.Cards
 {
     /// <summary>
     /// 5 树：立刻打出牌堆最上面那张牌，不触发效果。
-    /// <para>抽取牌堆顶牌放入自己场地，并设置 EffectsSuppressed = true 使其不触发任何效果。</para>
+    /// <para>子流程：1.翻开牌堆顶牌 2.选择目标场地(通过 PlayTarget.TargetBoardId) 3.放入目标场地，EffectsSuppressed=true</para>
     /// </summary>
     public class Card05_Tree : CardBase
     {
@@ -15,7 +15,10 @@ namespace CardGame.Cards
 
             // 不触发该牌的任何效果
             topCard.EffectsSuppressed = true;
-            context.Board.PlayCard(playerId, topCard);
+
+            // 放入 target 指定的场地，fallback 放入自己场地
+            int targetBoardId = target?.TargetBoardId ?? playerId;
+            context.Board.PlayCard(targetBoardId, topCard);
         }
     }
 }

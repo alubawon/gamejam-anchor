@@ -44,6 +44,11 @@ namespace CardGame
         // 随机不重复：每个事件类型上次选中的索引
         private readonly Dictionary<InGameEventType, int> _lastBubbleIndex = new();
 
+        // 打断多步对话状态
+        private int _interruptStepIndex;
+        private InGameEvent _interruptEvent;
+        private ScenarioEntry _interruptEntry;
+
         protected virtual void Awake()
         {
             RegisterAllDialogues();
@@ -74,11 +79,29 @@ namespace CardGame
                 ProcessQueue();
         }
 
-        /// <summary>打断事件：玩家点击继续后调用，解除打断状态并处理队列。</summary>
+        /// <summary>打断事件：玩家点击继续后调用，推进到下一步或解除打断状态。</summary>
         public void ContinueInterrupt()
         {
             IsInterruptActive = false;
             _currentTopPrompt = default;
+
+            // 多步对话：推进到下一步
+            if (_interruptEntry != null && _interruptEvent != null)
+            {
+                _interruptStepIndex++;
+                if (_interruptStepIndex < _interruptEntry.TopPrompts.Length)
+                {
+                    // 还有下一步
+                    IsInterruptActive = true;
+                    _currentTopPrompt = ResolveTemplates(_interruptEntry.TopPrompts[_interruptStepIndex], _interruptEvent);
+                    return;
+                }
+                // 全部步骤完成
+                _interruptEntry = null;
+                _interruptEvent = null;
+                _interruptStepIndex = 0;
+            }
+
             ProcessQueue();
         }
 
@@ -105,6 +128,9 @@ namespace CardGame
             if (entry.Interrupt)
             {
                 IsInterruptActive = true;
+                _interruptStepIndex = 0;
+                _interruptEvent = evt;
+                _interruptEntry = entry;
                 if (entry.TopPrompts != null && entry.TopPrompts.Length > 0)
                     _currentTopPrompt = ResolveTemplates(entry.TopPrompts[0], evt);
                 return; // 等待 ContinueInterrupt() 调用
@@ -184,6 +210,9 @@ namespace CardGame
             _currentTopPrompt = default;
             IsInterruptActive = false;
             _lastBubbleIndex.Clear();
+            _interruptEntry = null;
+            _interruptEvent = null;
+            _interruptStepIndex = 0;
         }
 
         // ── 注册全部 CSV 对话 ─────────────────────────────────

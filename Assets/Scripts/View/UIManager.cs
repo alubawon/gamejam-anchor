@@ -65,14 +65,8 @@ namespace CardGame.UI
                     break;
 
                 case GamePhase.IntroStory:
+                    // 只显示面板，剧情播放由 SystemManager 驱动
                     _preGameScenario?.Show();
-                    _preGameScenario?.Play(new[]
-                    {
-                        new DialogueLine("旁白", "深夜的海面上，一艘孤船漂泊……", 3f),
-                        new DialogueLine("旁白", "船上的三人，各自怀揣着不同的命运。", 3f),
-                        new DialogueLine("旁白", "在这张牌桌上，只有一人能活下去。", 3f),
-                        new DialogueLine("旁白", "牌局，开始了。", 3f),
-                    }, () => _systemManager?.StartGameFlow());
                     break;
 
                 case GamePhase.Match:

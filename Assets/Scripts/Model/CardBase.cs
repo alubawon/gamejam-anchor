@@ -15,6 +15,9 @@ namespace CardGame
 
         /// <summary>玩家的选择结果（如 Cloud 是否选择交换牌堆顶底）。</summary>
         public bool? Choice { get; set; }
+
+        /// <summary>Tree 的目标场地 ID（翻开牌放入哪个玩家场地）。</summary>
+        public int? TargetBoardId { get; set; }
     }
 
     /// <summary>
@@ -52,5 +55,16 @@ namespace CardGame
 
         /// <summary>在场效果 — BoardManager.CheckAllBoards 时对场上每张牌调用。</summary>
         public virtual void OnFieldCheck(IGameContext context, int playerId) { }
+
+        /// <summary>
+        /// 当卡牌效果因免疫被阻止时触发。
+        /// Boat/Snake 的 OnPlay 在免疫检查失败时调用此方法。
+        /// 参数：targetPlayerId（被免疫的玩家），sourcePlayerId（出牌者）
+        /// </summary>
+        public static event Action<int, int> OnEffectBlocked;
+        protected static void RaiseEffectBlocked(int targetPlayerId, int sourcePlayerId)
+        {
+            OnEffectBlocked?.Invoke(targetPlayerId, sourcePlayerId);
+        }
     }
 }

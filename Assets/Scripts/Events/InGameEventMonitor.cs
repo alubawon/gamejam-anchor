@@ -19,6 +19,10 @@ namespace CardGame
         private bool _firstDrawTriggered;
         private bool _gameStartTriggered;
 
+        // 追踪 Boat 打出前目标玩家是否有 Coffin
+        private int _boatTargetPlayerId = -1;
+        private bool _boatTargetHadCoffin = false;
+
         public InGameEventMonitor(
             TurnManager turnManager,
             IGameContext context,
@@ -44,6 +48,7 @@ namespace CardGame
             _turnManager.OnPlayCompleted += OnPlayCompleted;
             _turnManager.OnCheckBoardComplete += OnCheckBoardComplete;
             _turnManager.OnGameWon += OnGameWon;
+            CardBase.OnEffectBlocked += OnEffectBlocked;
         }
 
         /// <summary>停止监视 — 取消订阅。</summary>
@@ -58,6 +63,7 @@ namespace CardGame
             _turnManager.OnPlayCompleted -= OnPlayCompleted;
             _turnManager.OnCheckBoardComplete -= OnCheckBoardComplete;
             _turnManager.OnGameWon -= OnGameWon;
+            CardBase.OnEffectBlocked -= OnEffectBlocked;
         }
 
         /// <summary>重置监视状态（新一局时调用）。</summary>
@@ -72,7 +78,6 @@ namespace CardGame
 
         private void OnTurnStart(int playerId)
         {
-            // 第一回合开始时触发 GameStart
             if (!_gameStartTriggered && _turnManager.Round == 0 && playerId == 0)
             {
                 _gameStartTriggered = true;
@@ -82,7 +87,6 @@ namespace CardGame
 
         private void OnCardDrawn(int playerId, CardBase card)
         {
-            // 玩家先手第一次抽牌 → FirstDraw 教学
             if (!_firstDrawTriggered && playerId == 0 && _turnManager.Round == 0)
             {
                 _firstDrawTriggered = true;
@@ -117,13 +121,11 @@ namespace CardGame
             // #6-9 CPU 气泡 — 不在游戏结束前触发
             if (player != null && player.IsCPU)
             {
-                // 判断是否会导致游戏结束（检查打出后是否集齐）
                 bool willEndGame = false;
                 if (card.GoesToBoardAfterPlay && targetBoardId >= 0)
                 {
-                    // 粗略检查：打出后该场地不同牌数是否达到7
                     int uniqueCount = WinChecker.GetUniqueCardCount(_context, targetBoardId);
-                    if (!context.Board.HasCardWithId(targetBoardId, card.Id))
+                    if (!_context.Board.HasCardWithId(targetBoardId, card.Id))
                         uniqueCount++;
                     willEndGame = uniqueCount >= 7;
                 }
@@ -142,7 +144,6 @@ namespace CardGame
                         TargetPlayerId = targetBoardId,
                     };
 
-                    // 胖子 (PlayerId=2) 使用专用台词
                     if (playerId == 2)
                         _scenario.TriggerFatGuyBubble(bubbleType, evt);
                     else
@@ -161,10 +162,15 @@ namespace CardGame
                 });
             }
 
-            // 卡牌效果事件 — 根据 card.Id 触发对应子流程
-            TriggerCardEffectEvent(playerId, card, targetBoardId, null);
+            // Boat 打出前记录目标玩家是否有 Coffin
+            if (card.Id == 3)
+            {
+                // 无法在此获取 EffectTarget（OnCardPlayed 不带它），在 OnPlayCompleted 中处理
+            }
 
-            // 检查接近胜利
+            // 卡牌效果事件
+            TriggerCardEffectEvent(playerId, card, targetBoardId);
+
             CheckNearVictory();
         }
 
@@ -196,15 +202,25 @@ namespace CardGame
                 });
             }
 
-            // 船移除棺材 → CoffinRemoved
-            if (card.Id == 3 && effectTarget?.TargetPlayerId != null && effectTarget.TargetCardIndex >= 0)
+            // 船移除牌 → 检查是否移除了棺材
+            if (card.Id == 3 && effectTarget?.TargetPlayerId != null)
             {
-                // 检查被移除的牌是否是棺材（在 OnPlay 中已被移除，无法直接检查）
-                // 这里通过 OnPlayCompleted 的上下文推断：如果目标玩家之前有棺材但现在没有
-                if (!context.Board.HasCardWithId(effectTarget.TargetPlayerId.Value, 8))
+                int targetId = effectTarget.TargetPlayerId.Value;
+                // 如果目标玩家现在没有棺材，可能被移除了
+                // 更精确：检查牌堆底最后一张是否是棺材
+                if (!_context.Board.HasCardWithId(targetId, 8))
                 {
-                    // 可能是棺材被移除了（也可能本来就没有）
-                    // 更精确的判断需要在 OnPlay 前记录，这里简化处理
+                    // 牌刚被放入牌堆底，检查 DeckManager.PeekBottom
+                    var bottomCard = _context.Deck.PeekBottom();
+                    if (bottomCard != null && bottomCard.Id == 8)
+                    {
+                        _scenario.TriggerEvent(new InGameEvent(InGameEventType.CoffinRemoved)
+                        {
+                            PlayerId = targetId,
+                            CardId = 8,
+                            CardName = "棺材",
+                        });
+                    }
                 }
             }
         }
@@ -219,11 +235,6 @@ namespace CardGame
                     PlayerId = playerId,
                 });
             }
-
-            // 检查房子免疫触发
-            // 当其他玩家对有 House 的玩家使用效果时，免疫被触发
-            // 这里简化处理：在 CheckBoard 时如果玩家 IsImmune 但不是本回合刚放的 House
-            // 更精确的免疫触发检测需要在 Boat/Snake 的 OnPlay 中处理
         }
 
         private void OnGameWon(int winnerId)
@@ -232,7 +243,6 @@ namespace CardGame
 
             if (winner != null && winner.IsCPU)
             {
-                // CPU 胜利
                 if (winnerId == 2)
                     _scenario.TriggerFatGuyBubble(InGameEventType.CPUWin,
                         new InGameEvent(InGameEventType.CPUWin) { PlayerId = winnerId });
@@ -244,19 +254,28 @@ namespace CardGame
             }
             else
             {
-                // 玩家胜利 → 两个 CPU 依次反应
                 _scenario.TriggerEvent(new InGameEvent(InGameEventType.PlayerWin)
                 {
                     PlayerId = 0,
                 });
-                // 胖子反应排在瘦子之后（通过队列）
                 _scenario.EnqueueFatGuyLoseBubble();
             }
         }
 
+        // ── 免疫触发 ──────────────────────────────────────────
+
+        private void OnEffectBlocked(int targetPlayerId, int sourcePlayerId)
+        {
+            _scenario.TriggerEvent(new InGameEvent(InGameEventType.HouseImmunityTriggered)
+            {
+                PlayerId = targetPlayerId,
+                TargetPlayerId = sourcePlayerId,
+            });
+        }
+
         // ── 卡牌效果事件 ──────────────────────────────────────
 
-        private void TriggerCardEffectEvent(int playerId, CardBase card, int targetBoardId, PlayTarget effectTarget)
+        private void TriggerCardEffectEvent(int playerId, CardBase card, int targetBoardId)
         {
             var player = _context.GetPlayer(playerId);
             bool isCPU = player != null && player.IsCPU;
@@ -302,8 +321,5 @@ namespace CardGame
                 }
             }
         }
-
-        // 引用外部 context（用于 OnPlayCompleted 中检查）
-        private IGameContext context => _context;
     }
 }
