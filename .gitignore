@@ -35,3 +35,6 @@ Logs/
 
 # Claude Code local settings (contains permissions)
 .claude/settings.local.json
+
+# MCP configuration (contains API keys)
+.mcp.json
