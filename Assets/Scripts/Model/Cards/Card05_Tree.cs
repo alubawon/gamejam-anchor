@@ -18,7 +18,31 @@ namespace CardGame.Cards
 
             // 放入 target 指定的场地，fallback 放入自己场地
             int targetBoardId = target?.TargetBoardId ?? playerId;
-            context.Board.PlayCard(targetBoardId, topCard);
+
+            // 检查目标场地是否已有同名牌 → 如果有则放回牌堆顶
+            if (context.Board.HasCardWithId(targetBoardId, topCard.Id))
+            {
+                // 目标场地已有同名牌，尝试放入其他合法场地
+                bool placed = false;
+                foreach (var p in context.Players)
+                {
+                    if (!context.Board.HasCardWithId(p.Id, topCard.Id))
+                    {
+                        context.Board.PlayCard(p.Id, topCard);
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed)
+                {
+                    // 所有场地都有同名牌 → 放回牌堆顶
+                    context.Deck.PutOnTop(topCard);
+                }
+            }
+            else
+            {
+                context.Board.PlayCard(targetBoardId, topCard);
+            }
         }
     }
 }

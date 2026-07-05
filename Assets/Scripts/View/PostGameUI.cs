@@ -27,7 +27,8 @@ namespace CardGame.UI
                 _restartButton.onClick.AddListener(() => OnRestart?.Invoke());
             if (_returnMenuButton != null)
                 _returnMenuButton.onClick.AddListener(() => OnReturnMenu?.Invoke());
-            Hide();
+            // 不在 Awake 中 Hide — 初始状态由 UIManager.HideAll() 控制
+            // 否则 Show() 激活对象后 Awake 立即 Hide 导致永远不显示
         }
 
         /// <summary>显示结算画面。</summary>

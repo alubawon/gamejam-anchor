@@ -61,6 +61,18 @@ namespace CardGame
             _deck.AddRange(cards);
         }
 
+        /// <summary>在指定索引处插入一张牌。</summary>
+        public void InsertAt(int index, CardBase card)
+        {
+            _deck.Insert(index, card);
+        }
+
+        /// <summary>从牌堆中移除指定牌。</summary>
+        public bool Remove(CardBase card)
+        {
+            return _deck.Remove(card);
+        }
+
         /// <summary>Fisher-Yates 洗牌。</summary>
         public void Shuffle(System.Random rng = null)
         {

@@ -82,8 +82,8 @@ namespace CardGame.UI
                     break;
 
                 case GamePhase.GameComplete:
-                    if (_systemManager != null && _systemManager.LastMatchResult != null)
-                        _postGame?.Show(_systemManager.LastMatchResult);
+                    // 结局剧情结束后直接返回标题画面
+                    _titleScreen?.Show();
                     break;
             }
         }

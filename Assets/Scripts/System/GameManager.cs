@@ -119,6 +119,9 @@ namespace CardGame
 
         private IEnumerator ProcessTurns()
         {
+            // 等待一帧，确保 GameMatchUI.Initialize() 已绑定事件
+            yield return null;
+
             while (State == MatchState.Playing)
             {
                 // 阶段 1 & 2：回合开始 + 检查场地
@@ -137,8 +140,12 @@ namespace CardGame
                 }
 
                 // 阶段 3：摸牌
-                _turnManager.Draw(this);
+                var drawnCard = _turnManager.Draw(this);
                 yield return null; // 让摸牌事件被 View 层处理
+
+                // 牌堆为空触发保底 → 游戏已结束，退出协程
+                if (State != MatchState.Playing)
+                    yield break;
 
                 // 阶段 4：出牌
                 if (player.IsCPU)
@@ -170,25 +177,38 @@ namespace CardGame
 
         // ── 人类玩家输入入口 ──────────────────────────────────
 
+        /// <summary>最近一次出牌失败的错误信息。</summary>
+        public string LastPlayError { get; private set; } = "";
+
         /// <summary>
         /// 提交人类玩家的出牌动作（由 InputController 调用）。
         /// </summary>
-        /// <returns>true 表示出牌成功。</returns>
+        /// <returns>true 表示出牌成功。失败时 LastPlayError 包含原因。</returns>
         public bool SubmitHumanPlay(PlayAction action)
         {
             if (State != MatchState.WaitingForHumanInput)
+            {
+                LastPlayError = "当前不是你的出牌时机";
                 return false;
+            }
 
             int playerId = _turnManager.CurrentPlayerId;
             var player = GetPlayer(playerId);
             if (player == null || player.IsCPU)
+            {
+                LastPlayError = "非人类玩家";
                 return false;
+            }
 
             if (_turnManager.TryPlay(this, action))
             {
                 _waitingForHumanInput = false;
+                LastPlayError = "";
                 return true;
             }
+            // 获取验证失败的原因
+            _turnManager.ValidatePlay(this, action, out string error);
+            LastPlayError = error;
             return false;
         }
 
@@ -212,8 +232,12 @@ namespace CardGame
             };
             foreach (var player in _players)
             {
-                result.BoardPoints[player.Id] =
-                    WinChecker.GetUniqueCardCount(this, player.Id);
+                // 计分：场地上所有牌的牌面点数之和
+                var board = this.Board.GetPlayerBoard(player.Id);
+                int score = 0;
+                foreach (var card in board)
+                    score += card.Id;
+                result.BoardPoints[player.Id] = score;
             }
 
             _pendingResult = result;

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
 
 namespace CardGame
 {
@@ -65,7 +67,47 @@ namespace CardGame
             // 构建牌堆
             var cards = CardFactory.CreateDeck(copiesPerCard);
             context.Deck.BuildDeck(cards);
-            context.Deck.Shuffle();
+
+            // 棺材特殊洗牌规则：
+            // 1. 分离棺材牌和非棺材牌
+            // 2. 只保留1张棺材参与正常洗牌
+            // 3. 洗牌后将剩余棺材牌随机插入牌堆后三分之二位置
+            var coffins = new List<CardBase>();
+            var nonCoffins = new List<CardBase>();
+            foreach (var c in cards)
+            {
+                if (c.Id == 8)
+                    coffins.Add(c);
+                else
+                    nonCoffins.Add(c);
+            }
+
+            // 保留1张棺材参与洗牌
+            var rng = new System.Random();
+            var shuffledCoffin = coffins[0];
+            var extraCoffins = coffins.Skip(1).ToList();
+
+            // 合并非棺材 + 1张棺材 → 洗牌
+            var shufflePool = new List<CardBase>(nonCoffins) { shuffledCoffin };
+            // Fisher-Yates 洗牌
+            for (int i = shufflePool.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (shufflePool[i], shufflePool[j]) = (shufflePool[j], shufflePool[i]);
+            }
+
+            // 构建牌堆
+            context.Deck.BuildDeck(shufflePool);
+
+            // 将剩余棺材牌随机插入牌堆后三分之二位置
+            int deckCount = context.Deck.Count;
+            int insertStart = deckCount / 3; // 后三分之一的起点
+            foreach (var coffin in extraCoffins)
+            {
+                int insertPos = insertStart + rng.Next(deckCount - insertStart + 1);
+                insertPos = Mathf.Min(insertPos, context.Deck.Count);
+                context.Deck.InsertAt(insertPos, coffin);
+            }
 
             // 初始化场地
             context.Board.ClearAll();
@@ -120,7 +162,8 @@ namespace CardGame
 
         /// <summary>
         /// 阶段 3：摸牌 — 当前玩家从牌堆顶摸 1 张。
-        /// <para>若 CanPlay 为 false（Coffin 在场）或牌堆已空，则不摸牌。</para>
+        /// <para>若 CanPlay 为 false（Coffin 在场）则不摸牌。</para>
+        /// <para>若牌堆已空，触发保底逻辑：当前玩家直接失败（对手获胜）。</para>
         /// </summary>
         /// <returns>摸到的卡牌；未摸到返回 null。</returns>
         public CardBase Draw(IGameContext context)
@@ -129,6 +172,22 @@ namespace CardGame
             var player = context.GetPlayer(playerId);
             if (player == null || !player.CanPlay)
                 return null;
+
+            // 牌堆为空 → 保底：当前玩家失败，第一个对手获胜
+            if (context.Deck.Count <= 0)
+            {
+                int winnerId = -1;
+                foreach (var p in context.Players)
+                {
+                    if (p.Id != playerId) { winnerId = p.Id; break; }
+                }
+                if (winnerId >= 0)
+                {
+                    OnPlayCompleted?.Invoke(playerId, null, -1, null);
+                    OnGameWon?.Invoke(winnerId);
+                }
+                return null;
+            }
 
             var card = context.Deck.DrawCard();
             if (card != null)
@@ -230,18 +289,40 @@ namespace CardGame
                 return false;
             }
 
-            // Coffin 优先规则：手中有棺材时必须打出棺材
-            if (MustPlayCoffin(context) && action.Card.Id != 8)
-            {
-                error = "手中有棺材，必须优先打出棺材";
-                return false;
-            }
-
             // 棺材只能打向自己场地
             if (action.Card.Id == 8 && action.TargetBoardId != playerId)
             {
                 error = "棺材必须打进自己面前";
                 return false;
+            }
+
+            // 棺材第三张限制：场上已有两张棺材时，只能在自己场地已集齐 2～7 所有牌时打出
+            if (action.Card.Id == 8)
+            {
+                int coffinCount = 0;
+                foreach (var p in context.Players)
+                {
+                    if (context.Board.HasCardWithId(p.Id, 8))
+                        coffinCount++;
+                }
+                if (coffinCount >= 2)
+                {
+                    // 检查自己场地是否已有 2～7 全部六张牌
+                    bool hasAllOthers = true;
+                    for (int id = 2; id <= 7; id++)
+                    {
+                        if (!context.Board.HasCardWithId(playerId, id))
+                        {
+                            hasAllOthers = false;
+                            break;
+                        }
+                    }
+                    if (!hasAllOthers)
+                    {
+                        error = "场上已有两张棺材，需在自己场地集齐2～7所有牌后才能打出第三张棺材";
+                        return false;
+                    }
+                }
             }
 
             // 目标场地不能有相同点数的牌（仅对进入场地的牌检查）

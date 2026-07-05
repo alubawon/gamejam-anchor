@@ -2,21 +2,23 @@ using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using TMPro;
 
 namespace CardGame.UI
 {
     /// <summary>
     /// 对局前/后剧情演出 UI。
-    /// <para>全屏覆盖，居中显示对话文本，点击推进。</para>
+    /// <para>全屏覆盖，居中显示对话文本，点击全屏任意位置推进。</para>
     /// </summary>
-    public class ScenarioUI : MonoBehaviour
+    public class ScenarioUI : MonoBehaviour, IPointerClickHandler
     {
         [Header("UI 引用")]
         [SerializeField] private TextMeshProUGUI _speakerText;
         [SerializeField] private TextMeshProUGUI _dialogueText;
         [SerializeField] private Button _continueButton;
         [SerializeField] private CanvasGroup _canvasGroup;
+        [SerializeField] private Image _fullScreenClickArea;
         [SerializeField] private float _fadeDuration = 0.5f;
 
         /// <summary>用户点击继续。</summary>
@@ -24,6 +26,7 @@ namespace CardGame.UI
 
         private DialogueLine[] _lines;
         private int _currentIndex;
+        private bool _canAdvance;
 
         private void Awake()
         {
@@ -31,11 +34,19 @@ namespace CardGame.UI
                 _continueButton.onClick.AddListener(Advance);
         }
 
+        /// <summary>点击全屏任意位置推进。</summary>
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (_canAdvance)
+                Advance();
+        }
+
         /// <summary>播放一组对话行。</summary>
         public void Play(DialogueLine[] lines, Action onComplete = null)
         {
             _lines = lines;
             _currentIndex = 0;
+            _canAdvance = false;
             StartCoroutine(PlaySequence(onComplete));
         }
 
@@ -44,11 +55,15 @@ namespace CardGame.UI
             // 淡入
             yield return Fade(0f, 1f);
 
+            _canAdvance = true;
+
             while (_lines != null && _currentIndex < _lines.Length)
             {
                 ShowLine(_lines[_currentIndex]);
                 yield return new WaitUntil(() => _currentIndex > _currentDisplayIndex);
             }
+
+            _canAdvance = false;
 
             // 淡出
             yield return Fade(1f, 0f);
